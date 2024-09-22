@@ -17,3 +17,46 @@ export async function consolidateContacts(email: string | null, phoneNumber: str
     secondaryContactIds: secondaryContacts.map(c => c.id)
   };
 }
+
+async function findOrCreatePrimaryContact(email: string | null, phoneNumber: string | null) {
+  let contact = await prisma.contact.findFirst({
+    where: {
+      OR: [
+        { email: email || undefined },
+        { phoneNumber: phoneNumber || undefined }
+      ],
+      linkPrecedence: 'primary'
+    },
+    orderBy: { createdAt: 'asc' }
+  });
+
+  if (!contact) {
+    contact = await prisma.contact.create({
+      data: {
+        email,
+        phoneNumber,
+        linkPrecedence: 'primary'
+      }
+    });
+  } else if ((email && email !== contact.email) || (phoneNumber && phoneNumber !== contact.phoneNumber)) {
+    await prisma.contact.create({
+      data: {
+        email: email || undefined,
+        phoneNumber: phoneNumber || undefined,
+        linkedId: contact.id,
+        linkPrecedence: 'secondary'
+      }
+    });
+  }
+
+  return contact;
+}
+
+async function findSecondaryContacts(primaryId: number) {
+  return prisma.contact.findMany({
+    where: {
+      linkedId: primaryId,
+      linkPrecedence: 'secondary'
+    }
+  });
+}
